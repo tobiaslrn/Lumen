@@ -8,8 +8,12 @@ Lumen is an LED strip light controller and client package designed for desktop u
 
 ## Showcase
 
+<p align="middle">
+  <img src="assets/ambient_showcase.gif" align="center" width="49%" style="border-radius:10px" />
+  <img src="assets/app_showcase_transparent.png" align="center"  width="49%" style="border-radius:10px" />
+</p>
+
 <p align="center">
-  <img src="assets/app_showcase_transparent.png" width="400px" style="border-radius:10px" />
 </p>
 
 ## Supported Effects
