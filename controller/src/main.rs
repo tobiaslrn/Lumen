@@ -1,12 +1,14 @@
 #![no_std]
 #![no_main]
 
+pub mod atomic_channel;
 pub mod message_controller;
 pub mod messages;
 pub mod ws2812;
 
 use crate::messages::rgb8::Rgb8;
 use arrayvec::ArrayVec;
+use atomic_channel::AtomicChannel;
 use cyw43::JoinOptions;
 use cyw43_pio::PioSpi;
 use defmt::info;
@@ -30,7 +32,6 @@ use embassy_rp::peripherals::PIO0;
 use embassy_rp::peripherals::PIO1;
 use embassy_rp::pio::Pio;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
-use embassy_sync::channel::Channel;
 use embassy_time::with_timeout;
 use embassy_time::Duration;
 use embassy_time::Timer;
@@ -47,20 +48,20 @@ bind_interrupts!(struct Irqs {
     PIO1_IRQ_0 => embassy_rp::pio::InterruptHandler<PIO1>;
 });
 
-const WIFI_NETWORK: &'static str = env!("SSID");
-const WIFI_PASSWORD: &'static str = env!("PASSWORD");
-const RECV_PORT_STR: &'static str = env!("NET_RECV_PORT");
-const NET_ADDRESS_STR: &'static str = env!("NET_ADDRESS");
-const NET_GATEWAY_STR: &'static str = env!("NET_GATEWAY");
+const WIFI_NETWORK: &str = env!("SSID");
+const WIFI_PASSWORD: &str = env!("PASSWORD");
+const RECV_PORT_STR: &str = env!("NET_RECV_PORT");
+const NET_ADDRESS_STR: &str = env!("NET_ADDRESS");
+const NET_GATEWAY_STR: &str = env!("NET_GATEWAY");
 const RECV_PORT: u16 = parse_u16(RECV_PORT_STR);
 const LED_MAX: usize = 400;
 
 // env variables have to be set in .cargo/config.toml
-const_assert!(WIFI_NETWORK.len() > 0);
-const_assert!(WIFI_PASSWORD.len() > 0);
-const_assert!(RECV_PORT_STR.len() > 0);
-const_assert!(NET_ADDRESS_STR.len() > 0);
-const_assert!(NET_GATEWAY_STR.len() > 0);
+const_assert!(!WIFI_NETWORK.is_empty());
+const_assert!(!WIFI_PASSWORD.is_empty());
+const_assert!(!RECV_PORT_STR.is_empty());
+const_assert!(!NET_ADDRESS_STR.is_empty());
+const_assert!(!NET_GATEWAY_STR.is_empty());
 
 const NET_FW: &[u8] = include_bytes!("../cyw43-firmware/43439A0.bin");
 const NET_CLM: &[u8] = include_bytes!("../cyw43-firmware/43439A0_clm.bin");
@@ -68,23 +69,14 @@ const NET_CLM: &[u8] = include_bytes!("../cyw43-firmware/43439A0_clm.bin");
 static mut CORE1_STACK: multicore::Stack<32000> = multicore::Stack::new();
 static EXECUTOR1: StaticCell<Executor> = StaticCell::new();
 
-pub type SingleItemChannel<T> = Channel<CriticalSectionRawMutex, T, 1>;
-static LED_STATE_BUFFER: SingleItemChannel<arrayvec::ArrayVec<Rgb8, LED_MAX>> = Channel::new();
-static KEEP_ALIVE_BUFFER: SingleItemChannel<Duration> = Channel::new();
+static CYW43_STATE: StaticCell<cyw43::State> = StaticCell::new();
+static NET_STACK_RESOURCES: StaticCell<StackResources<10>> = StaticCell::new();
 
-pub async fn set_led_state_buffer(value: ArrayVec<Rgb8, LED_MAX>) {
-    if LED_STATE_BUFFER.is_full() {
-        LED_STATE_BUFFER.clear();
-    }
-    LED_STATE_BUFFER.send(value).await
-}
+pub type MUTEX = CriticalSectionRawMutex;
 
-pub async fn set_keep_alive_buffer(value: Duration) {
-    if KEEP_ALIVE_BUFFER.is_full() {
-        KEEP_ALIVE_BUFFER.clear();
-    }
-    KEEP_ALIVE_BUFFER.send(value).await
-}
+// Use static channels to communicate between tasks
+static ATOM_LED_STATE: AtomicChannel<MUTEX, ArrayVec<Rgb8, LED_MAX>> = AtomicChannel::new();
+static ATOM_KEEP_ALIVE: AtomicChannel<MUTEX, Duration> = AtomicChannel::new();
 
 macro_rules! var_info {
     ($var:ident) => {
@@ -138,10 +130,11 @@ async fn main(spawner: Spawner) {
         p.DMA_CH0,
     );
 
-    static CYW43_STATE: StaticCell<cyw43::State> = StaticCell::new();
     let cyw43_state = CYW43_STATE.init(cyw43::State::new());
     let (net_device, mut cyw43_control, cyw43_runner) =
         cyw43::new(cyw43_state, pwr, spi, NET_FW).await;
+
+    // Start the CYW43 WIFI Chip task
     spawner.must_spawn(cyw43_task(cyw43_runner));
 
     cyw43_control.init(NET_CLM).await;
@@ -154,7 +147,6 @@ async fn main(spawner: Spawner) {
         dns_servers: Vec::new(),
         gateway: Some(net_gateway),
     });
-    static NET_STACK_RESOURCES: StaticCell<StackResources<10>> = StaticCell::new();
     let (net_stack, net_runner) = embassy_net::new(
         net_device,
         static_wifi_config,
@@ -162,53 +154,19 @@ async fn main(spawner: Spawner) {
         rng.next_u64(),
     );
 
+    // Start the network stack
     spawner.must_spawn(net_task(net_runner));
+
+    // Start the Lumen UDP message handler
     spawner.must_spawn(handle_udp_messages_task(net_stack));
 
+    info!("Finished spawning tasks for core 0");
+
     loop {
+        // Main loop to handle wifi reconnections
         net_stack.wait_link_down().await;
         join_wifi(&mut cyw43_control, WIFI_NETWORK, WIFI_PASSWORD).await;
         net_stack.wait_link_up().await;
-    }
-}
-
-#[embassy_executor::task]
-async fn cyw43_task(
-    runner: cyw43::Runner<'static, Output<'static>, PioSpi<'static, PIO0, 0, DMA_CH0>>,
-) -> ! {
-    runner.run().await
-}
-
-#[embassy_executor::task]
-async fn net_task(mut runner: embassy_net::Runner<'static, cyw43::NetDriver<'static>>) -> ! {
-    runner.run().await
-}
-
-#[embassy_executor::task]
-async fn write_led_strip_task(mut ws: Ws2812<'static, PIO1, 0, LED_MAX>) -> ! {
-    loop {
-        let buffer = LED_STATE_BUFFER.receive().await;
-        ws.write(&buffer).await;
-    }
-}
-
-#[embassy_executor::task]
-async fn keep_alive_task() -> ! {
-    let mut blank_buffer = ArrayVec::new();
-    for _ in 0..blank_buffer.capacity() {
-        blank_buffer.push(Rgb8 { r: 0, g: 0, b: 0 })
-    }
-
-    loop {
-        let keepalive = with_timeout(Duration::from_millis(800), KEEP_ALIVE_BUFFER.receive()).await;
-        match keepalive {
-            Ok(duration) => {
-                Timer::after(duration).await;
-            }
-            Err(_) => {
-                set_led_state_buffer(blank_buffer.clone()).await;
-            }
-        }
     }
 }
 
@@ -242,6 +200,46 @@ async fn handle_udp_messages_task(stack: Stack<'static>) -> ! {
             }
         }
     }
+}
+
+#[embassy_executor::task]
+async fn write_led_strip_task(mut ws: Ws2812<'static, PIO1, 0, LED_MAX>) -> ! {
+    loop {
+        let buffer = ATOM_LED_STATE.recv_item().await;
+        ws.write(&buffer).await;
+    }
+}
+
+#[embassy_executor::task]
+async fn keep_alive_task() -> ! {
+    let mut blank_buffer = ArrayVec::new();
+    for _ in 0..blank_buffer.capacity() {
+        blank_buffer.push(Rgb8 { r: 0, g: 0, b: 0 })
+    }
+
+    loop {
+        let keepalive = with_timeout(Duration::from_millis(800), ATOM_KEEP_ALIVE.recv_item()).await;
+        match keepalive {
+            Ok(duration) => {
+                Timer::after(duration).await;
+            }
+            Err(_) => {
+                ATOM_LED_STATE.send(blank_buffer.clone()).await;
+            }
+        }
+    }
+}
+
+#[embassy_executor::task]
+async fn cyw43_task(
+    runner: cyw43::Runner<'static, Output<'static>, PioSpi<'static, PIO0, 0, DMA_CH0>>,
+) -> ! {
+    runner.run().await
+}
+
+#[embassy_executor::task]
+async fn net_task(mut runner: embassy_net::Runner<'static, cyw43::NetDriver<'static>>) -> ! {
+    runner.run().await
 }
 
 async fn join_wifi(net_control: &mut cyw43::Control<'static>, ssid: &str, password: &str) {

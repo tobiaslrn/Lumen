@@ -3,8 +3,8 @@ use crate::messages::bytestreamreader::MessageDeserializer;
 use crate::messages::message_id::MessageId;
 use crate::messages::message_kind::MessageKind;
 use crate::messages::ControllerMessage;
-use crate::set_keep_alive_buffer;
-use crate::set_led_state_buffer;
+use crate::ATOM_KEEP_ALIVE;
+use crate::ATOM_LED_STATE;
 use defmt::error;
 use defmt::warn;
 use heapless::FnvIndexMap;
@@ -39,11 +39,11 @@ impl MessageController {
 
         match kind {
             MessageKind::Empty => {}
-            MessageKind::KeepAlive { duration } => set_keep_alive_buffer(duration).await,
+            MessageKind::KeepAlive { duration } => ATOM_KEEP_ALIVE.send(duration).await,
             MessageKind::LedState {
                 strip_id: _,
                 led_values,
-            } => set_led_state_buffer(led_values).await,
+            } => ATOM_LED_STATE.send(led_values).await,
         }
     }
 
