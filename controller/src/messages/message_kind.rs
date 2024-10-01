@@ -11,13 +11,8 @@ use super::{
 #[derive(Debug)]
 pub enum MessageKind {
     Empty,
-    KeepAlive {
-        duration: Duration,
-    },
-    LedState {
-        strip_id: u8,
-        led_values: ArrayVec<Rgb8, 400>,
-    },
+    KeepAlive { duration: Duration },
+    LedState { led_values: ArrayVec<Rgb8, 400> },
 }
 
 impl MessageDeserializer for MessageKind {
@@ -37,7 +32,6 @@ impl MessageDeserializer for MessageKind {
                 MessageKind::KeepAlive { duration }
             }
             MessageId::LedState => {
-                let id = 0;
                 let led_values_cnt = reader.u16();
                 let mut led_values = ArrayVec::new();
 
@@ -46,10 +40,7 @@ impl MessageDeserializer for MessageKind {
                     led_values.push(rgb);
                 }
 
-                MessageKind::LedState {
-                    strip_id: id,
-                    led_values,
-                }
+                MessageKind::LedState { led_values }
             }
         };
 

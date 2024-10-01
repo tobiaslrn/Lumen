@@ -33,10 +33,7 @@ impl MessageController {
         match kind {
             MessageKind::Empty => {}
             MessageKind::KeepAlive { duration } => ATOM_KEEP_ALIVE.send(duration).await,
-            MessageKind::LedState {
-                strip_id: _,
-                led_values,
-            } => ATOM_LED_STATE.send(led_values).await,
+            MessageKind::LedState { led_values } => ATOM_LED_STATE.send(led_values).await,
         }
     }
 
