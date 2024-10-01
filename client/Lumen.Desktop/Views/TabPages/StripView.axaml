@@ -1,0 +1,79 @@
+﻿<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:tabPages="clr-namespace:Lumen.Desktop.ViewModels.TabPages"
+             mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
+             x:Class="Lumen.Desktop.Views.TabPages.StripView"
+             x:DataType="tabPages:StripViewModel">
+
+    <ScrollViewer VerticalScrollBarVisibility="Hidden">
+        <StackPanel>
+
+            <Rectangle Margin="5" />
+
+            <!-- The Effect Settings selection and editor  -->
+            <Expander VerticalAlignment="Top" HorizontalAlignment="Stretch" IsExpanded="True" CornerRadius="4"
+                      Background="{DynamicResource TranspWhiteBg}" Header="Effect">
+
+                <StackPanel Margin="5">
+                    <ComboBox x:Name="EffectSettingsComboBox2"
+                              HorizontalAlignment="Stretch"
+                              ItemsSource="{Binding  EffectItems}"
+                              SelectedItem="{Binding SelectedEffectItem}">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding ViewModel.EffectName}" />
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+
+                    <Rectangle Margin="5" />
+                    <!-- The settings page of the selected effect -->
+                    <ContentControl Content="{Binding SelectedEffectItem.ViewModel}" />
+                </StackPanel>
+            </Expander>
+
+
+            <Rectangle Margin="5" />
+
+            <!-- The Strip Layout  -->
+            <Expander VerticalAlignment="Top" HorizontalAlignment="Stretch" IsExpanded="True" CornerRadius="4"
+                      Background="{DynamicResource TranspWhiteBg}" Header="Layout">
+                <Grid RowDefinitions="Auto 5 Auto 5 Auto 5 Auto 5"
+                      ColumnDefinitions="5 Auto * Auto 5">
+                    <Label Grid.Row="0" Grid.Column="1" VerticalAlignment="Center" Content="Length Right" />
+                    <NumericUpDown Grid.Row="0" Grid.Column="3" Value="{Binding LayoutCountRight}" FormatString="0"
+                                   Width="130" />
+
+                    <Label Grid.Row="2" Grid.Column="1" VerticalAlignment="Center" Content="Length Top" />
+                    <NumericUpDown Grid.Row="2" Grid.Column="3" Value="{Binding LayoutCountTop}" FormatString="0" />
+
+                    <Label Grid.Row="4" Grid.Column="1" VerticalAlignment="Center" Content="Length Left" />
+                    <NumericUpDown Grid.Row="4" Grid.Column="3" Value="{Binding LayoutCountLeft}" FormatString="0" />
+
+                    <Label Grid.Row="6" Grid.Column="1" VerticalAlignment="Center" Content="Length Bottom" />
+                    <NumericUpDown Grid.Row="6" Grid.Column="3" Value="{Binding LayoutCountBottom}"
+                                   FormatString="0" />
+
+                </Grid>
+            </Expander>
+
+            <Rectangle Margin="5" />
+
+            <!-- The Controller Connection Settings  -->
+            <Expander VerticalAlignment="Top" HorizontalAlignment="Stretch" IsExpanded="False" CornerRadius="4"
+                      Background="{DynamicResource TranspWhiteBg}" Header="Controller Connection Settings">
+                <Grid RowDefinitions="Auto 5 Auto 5" ColumnDefinitions="5 Auto * Auto 5">
+                    <Label Grid.Row="0" Grid.Column="1" VerticalAlignment="Center" Content="IP Address" />
+                    <TextBox Grid.Row="0" Grid.Column="3" MinWidth="130" HorizontalContentAlignment="Right"
+                             Text="{Binding ControllerAddress}" />
+
+                    <Label Grid.Row="2" Grid.Column="1" VerticalAlignment="Center" Content="Port" />
+                    <TextBox Grid.Row="2" Grid.Column="3" MinWidth="130" HorizontalContentAlignment="Right"
+                             Text="{Binding ControllerPort}" />
+                </Grid>
+            </Expander>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

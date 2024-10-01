@@ -1,0 +1,57 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:Lumen.Desktop.ViewModels"
+        xmlns:actipro="http://schemas.actiprosoftware.com/avaloniaui"
+        x:Class="Lumen.Desktop.Views.MainWindow"
+        x:DataType="vm:MainWindowViewModel"
+        Icon="/Assets/lumen.ico"
+        Title="Lumen"
+        Loaded="Control_OnLoaded"
+        ExtendClientAreaChromeHints="NoChrome"
+        ExtendClientAreaToDecorationsHint="True"
+        Width="400" Height="600"
+        CanResize="False">
+
+    <Design.DataContext>
+        <vm:MainWindowViewModel />
+    </Design.DataContext>
+
+
+    <Panel>
+        <actipro:MeshGradientPresenter Background="LavenderBlush">
+            <actipro:MeshGradientNode Center="10%, 10%" Color="#edc7fc" />
+            <actipro:MeshGradientNode Center="85%, 30%" Color="#e4b8ff" />
+            <actipro:MeshGradientNode Center="70%, 85%" Color="PeachPuff" />
+            <actipro:MeshGradientNode Center="20%, 60%" Color="LightGoldenrodYellow" />
+        </actipro:MeshGradientPresenter>
+
+        <Grid RowDefinitions="Auto, 5, *" Margin="10">
+            <!-- Header -->
+            <Grid Grid.Row="0" ColumnDefinitions="Auto 5 Auto * Auto">
+                <Image Grid.Column="0" Source="/Assets/lumen.ico" Height="40" />
+                <StackPanel Grid.Column="2" Orientation="Vertical" HorizontalAlignment="Left"
+                            VerticalAlignment="Center">
+                    <TextBlock Text="LED" VerticalAlignment="Center" FontSize="10" FontWeight="Light" />
+                    <TextBlock Text="Lumen" VerticalAlignment="Center" FontSize="15" FontWeight="Heavy" />
+                </StackPanel>
+
+                <Button Grid.Column="4" Background="Transparent" Click="OpenInGithubButton_OnClick">
+                    <Button.Content>
+                        <Image Source="/Assets/github-mark.png" Height="20" />
+                    </Button.Content>
+                </Button>
+            </Grid>
+
+            <!-- Spacing -->
+
+            <!-- Menu Selector -->
+            <Border Background="{DynamicResource TranspWhiteBg}" Grid.Row="2" CornerRadius="4">
+                <TabControl>
+                    <TabItem Header="Strip" FontSize="20" Content="{Binding StripViewModel}" />
+                    <TabItem Header="Application" FontSize="20" Content="{Binding ApplicationViewModel}" />
+                </TabControl>
+            </Border>
+        </Grid>
+    </Panel>
+
+</Window>

@@ -1,0 +1,14 @@
+[target.'cfg(all(target_arch = "arm", target_os = "none"))']
+runner = "probe-rs run --chip RP2040"
+
+[build]
+target = "thumbv6m-none-eabi" # Cortex-M0 and Cortex-M0+
+
+# To keep local env variables out of the repo it has to be modified with
+# > git update-index --assume-unchanged file
+# To enables to be commited revert it with
+# > git update-index --no-assume-unchanged file
+[env]
+DEFMT_LOG = "info"
+SSID = ""
+PASSWORD = ""
