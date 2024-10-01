@@ -32,11 +32,13 @@ use embassy_rp::peripherals::PIO0;
 use embassy_rp::peripherals::PIO1;
 use embassy_rp::pio::Pio;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
-use embassy_time::with_timeout;
 use embassy_time::Duration;
 use embassy_time::Timer;
 use heapless::Vec;
 use message_controller::MessageController;
+use messages::bytestreamreader::ByteStreamReader;
+use messages::bytestreamreader::MessageDeserializer;
+use messages::ControllerMessage;
 use rand::RngCore;
 use static_assertions::const_assert;
 use static_cell::StaticCell;
@@ -165,7 +167,13 @@ async fn main(spawner: Spawner) {
     loop {
         // Main loop to handle wifi reconnections
         net_stack.wait_link_down().await;
-        join_wifi(&mut cyw43_control, WIFI_NETWORK, WIFI_PASSWORD).await;
+        join_wifi(
+            &mut cyw43_control,
+            WIFI_NETWORK,
+            WIFI_PASSWORD,
+            Duration::from_millis(500),
+        )
+        .await;
         net_stack.wait_link_up().await;
     }
 }
@@ -196,7 +204,13 @@ async fn handle_udp_messages_task(stack: Stack<'static>) -> ! {
             }
             Ok((n, _)) => {
                 let read = &message_buffer[0..n];
-                msg_controller.handle_msg_lumen(read).await;
+                let mut reader = ByteStreamReader::new(read);
+                let decoded = ControllerMessage::deserialize_from(&mut reader);
+                if decoded.is_err() {
+                    error!("Error deserializing message");
+                    continue;
+                }
+                msg_controller.handle_msg_lumen(decoded.unwrap()).await;
             }
         }
     }
@@ -210,20 +224,21 @@ async fn write_led_strip_task(mut ws: Ws2812<'static, PIO1, 0, LED_MAX>) -> ! {
     }
 }
 
+/// The controller expects a KEEP_ALIVE message in intervals to keep the strip on or else it will turn off the LED strip.
 #[embassy_executor::task]
 async fn keep_alive_task() -> ! {
-    let mut blank_buffer = ArrayVec::new();
+    let mut blank_buffer: ArrayVec<Rgb8, LED_MAX> = ArrayVec::new();
     for _ in 0..blank_buffer.capacity() {
         blank_buffer.push(Rgb8 { r: 0, g: 0, b: 0 })
     }
-
+    let wait_for = Duration::from_millis(800);
     loop {
-        let keepalive = with_timeout(Duration::from_millis(800), ATOM_KEEP_ALIVE.recv_item()).await;
+        let keepalive = ATOM_KEEP_ALIVE.recv_with_timeout(wait_for).await;
         match keepalive {
-            Ok(duration) => {
-                Timer::after(duration).await;
+            Some(alive_duration) => {
+                Timer::after(alive_duration).await;
             }
-            Err(_) => {
+            None => {
                 ATOM_LED_STATE.send(blank_buffer.clone()).await;
             }
         }
@@ -242,7 +257,13 @@ async fn net_task(mut runner: embassy_net::Runner<'static, cyw43::NetDriver<'sta
     runner.run().await
 }
 
-async fn join_wifi(net_control: &mut cyw43::Control<'static>, ssid: &str, password: &str) {
+/// Join a wifi network with the given ssid and password. Retries on failure.
+async fn join_wifi(
+    net_control: &mut cyw43::Control<'static>,
+    ssid: &str,
+    password: &str,
+    time_until_retry: Duration,
+) {
     let join_options = JoinOptions::new(password.as_bytes());
     loop {
         match net_control.join(ssid, join_options.clone()).await {
@@ -256,7 +277,7 @@ async fn join_wifi(net_control: &mut cyw43::Control<'static>, ssid: &str, passwo
         }
 
         info!("Retrying wifi join in 500ms...");
-        Timer::after(Duration::from_millis(500)).await;
+        Timer::after(time_until_retry).await;
     }
 }
 

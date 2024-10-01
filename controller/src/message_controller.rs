@@ -1,17 +1,15 @@
-use crate::messages::bytestreamreader::ByteStreamReader;
-use crate::messages::bytestreamreader::MessageDeserializer;
 use crate::messages::message_id::MessageId;
 use crate::messages::message_kind::MessageKind;
 use crate::messages::ControllerMessage;
+use crate::messages::Timestamp;
 use crate::ATOM_KEEP_ALIVE;
 use crate::ATOM_LED_STATE;
-use defmt::error;
 use defmt::warn;
 use heapless::FnvIndexMap;
 
 #[derive(Clone, Default)]
 pub struct MessageController {
-    timestamp_map: FnvIndexMap<MessageId, u64, 64>,
+    message_timestamp_map: FnvIndexMap<MessageId, Timestamp, 64>,
 }
 
 impl MessageController {
@@ -19,18 +17,13 @@ impl MessageController {
         Self::default()
     }
 
-    pub async fn handle_msg_lumen(&mut self, buf: &[u8]) {
-        let mut reader = ByteStreamReader::new(buf);
-        let decoded = ControllerMessage::deserialize_from(&mut reader);
-
-        if decoded.is_err() {
-            error!("Error deserializing message");
-            return;
-        }
-
-        let ControllerMessage { timestamp, kind } = decoded.unwrap();
+    /// Handles the application logic for the received message.
+    /// The message is only processed if the received message is newer than the last one.
+    pub async fn handle_msg_lumen(
+        &mut self,
+        ControllerMessage { timestamp, kind }: ControllerMessage,
+    ) {
         let message_id = MessageId::from(&kind);
-
         let is_new_value = self.update_message_timestamp(message_id, timestamp);
         if !is_new_value {
             warn!("Discarding old message {:?}", message_id);
@@ -47,8 +40,10 @@ impl MessageController {
         }
     }
 
-    fn update_message_timestamp(&mut self, message_id: MessageId, timestamp: u64) -> bool {
-        let is_new_value = match self.timestamp_map.entry(message_id) {
+    /// Updates the timestamp of a message if the new timestamp is greater than the current one.
+    /// Returns true if the value was updated.
+    fn update_message_timestamp(&mut self, message_id: MessageId, timestamp: Timestamp) -> bool {
+        let is_new_value = match self.message_timestamp_map.entry(message_id) {
             heapless::Entry::Occupied(entry) => {
                 if *entry.get() < timestamp {
                     entry.insert(timestamp);

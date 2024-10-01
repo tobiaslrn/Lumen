@@ -42,7 +42,7 @@ impl MessageDeserializer for MessageKind {
                 let mut led_values = ArrayVec::new();
 
                 for _ in 0..led_values_cnt {
-                    let rgb = Rgb8::read_from_bsr(reader);
+                    let rgb = Rgb8::deserialize_from(reader)?;
                     led_values.push(rgb);
                 }
 

@@ -1,6 +1,7 @@
 use core::cell::Cell;
 use embassy_sync::blocking_mutex::raw::RawMutex;
 use embassy_sync::mutex::Mutex;
+use embassy_time::{Duration, Instant, Timer};
 
 /// A channel that holds only one item at a time.
 #[derive(Default)]
@@ -32,12 +33,28 @@ where
         self.inner.lock().await.take()
     }
 
-    /// Receives the value from the channel, blocking until it is available.
+    /// Receives the value from the channel, blocking until a value is available.
     pub async fn recv_item(&self) -> T {
         loop {
-            if let Some(item) = self.recv().await {
-                return item;
+            if let Some(message) = self.recv().await {
+                return message;
             }
+            Timer::after(Duration::from_millis(1)).await;
+        }
+    }
+
+    /// Receives the value from the channel, blocking until a value is available or the timeout is reached.
+    pub async fn recv_with_timeout(&self, timeout: Duration) -> Option<T> {
+        let now = Instant::now();
+        loop {
+            if let Some(message) = self.recv().await {
+                return Some(message);
+            }
+
+            if now.elapsed() >= timeout {
+                return None;
+            }
+            Timer::after_millis(1).await;
         }
     }
 }
