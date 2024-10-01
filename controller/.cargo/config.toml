@@ -12,3 +12,6 @@ target = "thumbv6m-none-eabi" # Cortex-M0 and Cortex-M0+
 DEFMT_LOG = "info"
 SSID = ""
 PASSWORD = ""
+NET_RECV_PORT = "34254"
+NET_ADDRESS = "192.168.0.50"
+NET_GATEWAY = "192.168.0.1"

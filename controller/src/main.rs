@@ -49,25 +49,30 @@ bind_interrupts!(struct Irqs {
 
 const WIFI_NETWORK: &'static str = env!("SSID");
 const WIFI_PASSWORD: &'static str = env!("PASSWORD");
+const RECV_PORT_STR: &'static str = env!("NET_RECV_PORT");
+const NET_ADDRESS_STR: &'static str = env!("NET_ADDRESS");
+const NET_GATEWAY_STR: &'static str = env!("NET_GATEWAY");
+const RECV_PORT: u16 = parse_u16(RECV_PORT_STR);
+const LED_MAX: usize = 400;
 
 // env variables have to be set in .cargo/config.toml
 const_assert!(WIFI_NETWORK.len() > 0);
 const_assert!(WIFI_PASSWORD.len() > 0);
-
-static mut CORE1_STACK: multicore::Stack<32000> = multicore::Stack::new();
-static EXECUTOR1: StaticCell<Executor> = StaticCell::new();
+const_assert!(RECV_PORT_STR.len() > 0);
+const_assert!(NET_ADDRESS_STR.len() > 0);
+const_assert!(NET_GATEWAY_STR.len() > 0);
 
 const NET_FW: &[u8] = include_bytes!("../cyw43-firmware/43439A0.bin");
 const NET_CLM: &[u8] = include_bytes!("../cyw43-firmware/43439A0_clm.bin");
 
-const MSG_RECV_PORT: u16 = 34254;
+static mut CORE1_STACK: multicore::Stack<32000> = multicore::Stack::new();
+static EXECUTOR1: StaticCell<Executor> = StaticCell::new();
 
-static LED_STATE_BUFFER: Channel<CriticalSectionRawMutex, arrayvec::ArrayVec<Rgb8, 400>, 1> =
-    Channel::new();
+pub type SingleItemChannel<T> = Channel<CriticalSectionRawMutex, T, 1>;
+static LED_STATE_BUFFER: SingleItemChannel<arrayvec::ArrayVec<Rgb8, LED_MAX>> = Channel::new();
+static KEEP_ALIVE_BUFFER: SingleItemChannel<Duration> = Channel::new();
 
-static KEEP_ALIVE_BUFFER: Channel<CriticalSectionRawMutex, Duration, 1> = Channel::new();
-
-pub async fn set_led_state_buffer(value: ArrayVec<Rgb8, 400>) {
+pub async fn set_led_state_buffer(value: ArrayVec<Rgb8, LED_MAX>) {
     if LED_STATE_BUFFER.is_full() {
         LED_STATE_BUFFER.clear();
     }
@@ -81,12 +86,25 @@ pub async fn set_keep_alive_buffer(value: Duration) {
     KEEP_ALIVE_BUFFER.send(value).await
 }
 
+macro_rules! var_info {
+    ($var:ident) => {
+        (stringify!($var), $var)
+    };
+}
+
 #[embassy_executor::main]
 async fn main(spawner: Spawner) {
     info!(
-        "Starting with env vars: {} and {}",
-        WIFI_NETWORK, WIFI_PASSWORD
+        "Starting with env vars:\n\t- {}\n\t- {}\n\t- {}\n\t- {}\n\t- {}",
+        var_info!(WIFI_NETWORK),
+        var_info!(WIFI_PASSWORD),
+        var_info!(RECV_PORT),
+        var_info!(NET_ADDRESS_STR),
+        var_info!(NET_GATEWAY_STR)
     );
+
+    let net_address = parse_ip_v4(NET_ADDRESS_STR);
+    let net_gateway = parse_ip_v4(NET_GATEWAY_STR);
 
     let mut rng = RoscRng;
     let p = embassy_rp::init(Default::default());
@@ -132,9 +150,9 @@ async fn main(spawner: Spawner) {
         .await;
 
     let static_wifi_config = embassy_net::Config::ipv4_static(StaticConfigV4 {
-        address: Ipv4Cidr::new(Ipv4Address::new(192, 168, 0, 50), 24),
+        address: Ipv4Cidr::new(net_address, 24),
         dns_servers: Vec::new(),
-        gateway: Some(Ipv4Address::new(192, 168, 0, 1)),
+        gateway: Some(net_gateway),
     });
     static NET_STACK_RESOURCES: StaticCell<StackResources<10>> = StaticCell::new();
     let (net_stack, net_runner) = embassy_net::new(
@@ -167,7 +185,7 @@ async fn net_task(mut runner: embassy_net::Runner<'static, cyw43::NetDriver<'sta
 }
 
 #[embassy_executor::task]
-async fn write_led_strip_task(mut ws: Ws2812<'static, PIO1, 0, 400>) -> ! {
+async fn write_led_strip_task(mut ws: Ws2812<'static, PIO1, 0, LED_MAX>) -> ! {
     loop {
         let buffer = LED_STATE_BUFFER.receive().await;
         ws.write(&buffer).await;
@@ -209,7 +227,7 @@ async fn handle_udp_messages_task(stack: Stack<'static>) -> ! {
         &mut tx_buffer,
     );
 
-    udp_socket.bind(MSG_RECV_PORT).unwrap();
+    udp_socket.bind(RECV_PORT).unwrap();
 
     let mut msg_controller = MessageController::new();
     let mut message_buffer = [0; 2048];
@@ -245,4 +263,25 @@ async fn join_wifi(net_control: &mut cyw43::Control<'static>, ssid: &str, passwo
         info!("Retrying wifi join in 500ms...");
         Timer::after(Duration::from_millis(500)).await;
     }
+}
+
+const fn parse_u16(s: &'static str) -> u16 {
+    let mut bytes = s.as_bytes();
+    let mut val = 0;
+    while let [byte, rest @ ..] = bytes {
+        core::assert!(b'0' <= *byte && *byte <= b'9', "invalid digit");
+        val = val * 10 + (*byte - b'0') as u16;
+        bytes = rest;
+    }
+    val
+}
+
+fn parse_ip_v4(s: &str) -> Ipv4Address {
+    let mut bytes = s.split('.').map(|b| b.parse::<u8>().unwrap());
+    Ipv4Address::new(
+        bytes.next().unwrap(),
+        bytes.next().unwrap(),
+        bytes.next().unwrap(),
+        bytes.next().unwrap(),
+    )
 }
