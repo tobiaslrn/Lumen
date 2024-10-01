@@ -238,10 +238,7 @@ async fn handle_udp_messages_task(stack: Stack<'static>) -> ! {
             }
             Ok((n, _)) => {
                 let read = &message_buffer[0..n];
-                match msg_controller.handle_msg_lumen(read).await {
-                    Ok(_) => {}
-                    Err(_) => error!("failed to decode msg"),
-                }
+                msg_controller.handle_msg_lumen(read).await;
             }
         }
     }

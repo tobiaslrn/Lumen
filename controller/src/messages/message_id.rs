@@ -1,3 +1,5 @@
+use defmt::Format;
+
 use super::message_kind::MessageKind;
 
 #[repr(u16)]
@@ -27,6 +29,16 @@ impl From<&MessageKind> for MessageId {
             MessageKind::Empty => MessageId::Empty,
             MessageKind::KeepAlive { .. } => MessageId::KeepAlive,
             MessageKind::LedState { .. } => MessageId::LedState,
+        }
+    }
+}
+
+impl Format for MessageId {
+    fn format(&self, f: defmt::Formatter) {
+        match self {
+            MessageId::Empty => defmt::write!(f, "Empty"),
+            MessageId::KeepAlive => defmt::write!(f, "KeepAlive"),
+            MessageId::LedState => defmt::write!(f, "LedState"),
         }
     }
 }

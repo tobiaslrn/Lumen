@@ -6,6 +6,7 @@ use crate::messages::ControllerMessage;
 use crate::set_keep_alive_buffer;
 use crate::set_led_state_buffer;
 use defmt::error;
+use defmt::warn;
 use heapless::FnvIndexMap;
 
 #[derive(Clone, Default)]
@@ -18,13 +19,13 @@ impl MessageController {
         Self::default()
     }
 
-    pub async fn handle_msg_lumen(&mut self, buf: &[u8]) -> Result<(), ()> {
+    pub async fn handle_msg_lumen(&mut self, buf: &[u8]) {
         let mut reader = ByteStreamReader::new(buf);
         let decoded = ControllerMessage::deserialize_from(&mut reader);
 
-        if let Err(e) = decoded {
-            error!("error decoding message {}", e);
-            return Err(());
+        if decoded.is_err() {
+            error!("Error deserializing message");
+            return;
         }
 
         let ControllerMessage { timestamp, kind } = decoded.unwrap();
@@ -32,22 +33,17 @@ impl MessageController {
 
         let is_new_value = self.update_message_timestamp(message_id, timestamp);
         if !is_new_value {
-            return Err(());
+            warn!("Discarding old message {:?}", message_id);
+            return;
         }
 
         match kind {
-            MessageKind::Empty => Ok(()),
-            MessageKind::KeepAlive { duration } => {
-                set_keep_alive_buffer(duration).await;
-                Ok(())
-            }
+            MessageKind::Empty => {}
+            MessageKind::KeepAlive { duration } => set_keep_alive_buffer(duration).await,
             MessageKind::LedState {
                 strip_id: _,
                 led_values,
-            } => {
-                set_led_state_buffer(led_values).await;
-                Ok(())
-            }
+            } => set_led_state_buffer(led_values).await,
         }
     }
 
