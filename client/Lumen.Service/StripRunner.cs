@@ -39,7 +39,7 @@ public class StripRunner : IDisposable
             if (stripFrame != null)
             {
                 var msg = new ControllerMessage(DateTimeOffset.Now, new LedStateMessage(stripFrame.Leds));
-                await _connection.SendMessage(msg, cts);
+                _ = _connection.SendMessage(msg, cts);
             }
 
             await periodicTimer.WaitForNextTickAsync(cts);
@@ -53,7 +53,7 @@ public class StripRunner : IDisposable
         while (!cts.IsCancellationRequested)
         {
             var msg = new ControllerMessage(DateTimeOffset.Now, new KeepAliveMessage(duration));
-            await _connection.SendMessage(msg, cts);
+            _ = _connection.SendMessage(msg, cts);
             await periodicTimer.WaitForNextTickAsync(cts);
         }
     }
