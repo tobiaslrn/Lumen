@@ -1,7 +1,10 @@
-﻿using HPPH;
+﻿using System.Diagnostics.CodeAnalysis;
+using HPPH;
 using Lumen.Service.ControllerMessages;
 using Lumen.Service.Utilities;
+using Microsoft.Extensions.Logging;
 using ScreenCapture.NET;
+using static Lumen.Service.Logging;
 
 namespace Lumen.Service.Effect;
 
@@ -20,37 +23,68 @@ public class AmbientColorEffect : IEffect
         get { return _screenCaptureService ??= WeakScreenCaptureService.Instance; }
     }
 
-
-    public AmbientColorEffect(StripLayout layout, string monitor, int detailLevel, int smoothingFrames, uint fps)
+    private AmbientColorEffect(StripLayout layout, ICaptureZone fullscreen, IScreenCapture screenCapture, uint fps,
+        int smoothingFrames)
     {
         _layout = layout;
+        _fullscreen = fullscreen;
+        _screenCapture = screenCapture;
         _fps = fps;
         _previousFrames = [];
         for (int i = 0; i < smoothingFrames; i++)
         {
             _previousFrames.AddLast(new StripFrame(layout));
         }
+    }
 
+    public static bool TryBuild(StripLayout layout, string monitor, int detailLevel, int smoothingFrames,
+        uint fps, [NotNullWhen(true)] out AmbientColorEffect? effect)
+    {
+        effect = null;
         var gpus = ScreenCaptureService.GetGraphicsCards();
-        var selectedGpu = gpus.First();
+        GraphicsCard selectedGpu;
+        try
+        {
+            selectedGpu = gpus.First();
+        }
+        catch (Exception e)
+        {
+            Logger?.LogError(e, "Failed to find GPU");
+            return false;
+        }
 
-        var displays = ScreenCaptureService.GetDisplays(selectedGpu);
-        var selectedDisplay = displays.First(d => d.DeviceName == monitor);
+        var displays = ScreenCaptureService.GetDisplays(selectedGpu).ToArray();
+        Display selectedDisplay;
+        try
+        {
+            selectedDisplay = displays.First(d => d.DeviceName == monitor);
+        }
+        catch (Exception e)
+        {
+            Logger?.LogError(e, "Failed to find display {Monitor}", monitor);
+            return false;
+        }
 
-        _screenCapture = ScreenCaptureService.GetScreenCapture(selectedDisplay);
+        var screenCapture = ScreenCaptureService.GetScreenCapture(selectedDisplay);
 
-        _fullscreen = _screenCapture.RegisterCaptureZone(
+        var fullscreen = screenCapture.RegisterCaptureZone(
             0,
             0,
-            _screenCapture.Display.Width,
-            _screenCapture.Display.Height,
+            screenCapture.Display.Width,
+            screenCapture.Display.Height,
             detailLevel
         );
+
+        effect = new AmbientColorEffect(layout, fullscreen, screenCapture, fps, smoothingFrames);
+        return true;
     }
 
     public void Dispose()
     {
-        _screenCapture.UnregisterCaptureZone(_fullscreen);
+        if (!_screenCapture.UnregisterCaptureZone(_fullscreen))
+        {
+            Logger?.LogError("Failed to unregister capture zone");
+        }
     }
 
     public TimeSpan RequestedRefreshRate()
@@ -75,12 +109,12 @@ public class AmbientColorEffect : IEffect
 
         _previousFrames.AddLast(workingFrame);
 
-        var savedFrames = _previousFrames.ToArray();
+        var savedFrames = _previousFrames;
 
         if (_previousFrames.Count == 1)
             return _previousFrames.First();
 
-        var average = AverageFrameValues(savedFrames);
+        var average = AverageFrameValues(savedFrames, _layout);
         return average;
     }
 
@@ -160,10 +194,10 @@ public class AmbientColorEffect : IEffect
         return output;
     }
 
-    private static StripFrame AverageFrameValues(StripFrame[] savedFrames)
+    private static StripFrame AverageFrameValues(ICollection<StripFrame> savedFrames, StripLayout layout)
     {
-        var output = new StripFrame(savedFrames.First().Layout);
-        var totalWeights = savedFrames.Length + TotalWeight(savedFrames.Length + 1);
+        var output = new StripFrame(layout);
+        var totalWeights = savedFrames.Count + TotalWeight(savedFrames.Count + 1);
         for (var i = 0; i < output.Leds.Length; i++)
         {
             float r = 0;

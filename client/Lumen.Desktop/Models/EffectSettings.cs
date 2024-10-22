@@ -1,4 +1,5 @@
-﻿using System.Runtime.InteropServices;
+﻿using System.Diagnostics.CodeAnalysis;
+using System.Runtime.InteropServices;
 using System.Text.Json.Serialization;
 using Lumen.Desktop.ViewModels.TabPages.EffectSettings;
 using Lumen.Service;
@@ -13,7 +14,7 @@ namespace Lumen.Desktop.Models;
 public abstract class EffectSettings
 {
     public abstract EffectSettingViewModel ToEffectSettingViewModel();
-    public abstract IEffect? ToEffect(StripLayout layout);
+    public abstract bool TryToEffect(StripLayout layout, [NotNullWhen(true)] out IEffect? effect);
 
     public abstract bool IsConstructable();
 
@@ -40,9 +41,10 @@ public class EffectOffSettings : EffectSettings
         return new EffectOffViewModel();
     }
 
-    public override IEffect ToEffect(StripLayout layout)
+    public override bool TryToEffect(StripLayout layout, out IEffect? effect)
     {
-        return new SolidColorEffect(layout, new Rgb8(0, 0, 0));
+        effect = new SolidColorEffect(layout, new Rgb8(0, 0, 0));
+        return true;
     }
 
     public override bool IsConstructable()
@@ -65,14 +67,19 @@ public class EffectAmbientSettings : EffectSettings
         return new EffectAmbientViewModel(this);
     }
 
-    public override IEffect? ToEffect(StripLayout layout)
+    public override bool TryToEffect(StripLayout layout, [NotNullWhen(true)] out IEffect? effect)
     {
-        if (!string.IsNullOrEmpty(Monitor))
+        if (AmbientColorEffect.TryBuild(layout, Monitor ?? "", (int)DetailLevel,
+                (int)TemporalSmoothing, RefreshRate, out var e))
         {
-            return new AmbientColorEffect(layout, Monitor, (int)DetailLevel, (int)TemporalSmoothing, RefreshRate);
+            effect = e;
+            return true;
         }
-
-        return null;
+        else
+        {
+            effect = null;
+            return false;
+        }
     }
 
     public override bool IsConstructable()
@@ -92,9 +99,10 @@ public class EffectSolidSettings : EffectSettings
         return new EffectSolidViewModel(this);
     }
 
-    public override IEffect ToEffect(StripLayout layout)
+    public override bool TryToEffect(StripLayout layout, out IEffect? effect)
     {
-        return new SolidColorEffect(layout, new Rgb8(R, G, B));
+        effect = new SolidColorEffect(layout, new Rgb8(R, G, B));
+        return true;
     }
 
     public override bool IsConstructable()

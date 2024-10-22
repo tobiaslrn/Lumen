@@ -23,4 +23,6 @@ public class SolidColorEffect(StripLayout layout, Rgb8 color) : IEffect
     public void Dispose()
     {
     }
+
+    public static SolidColorEffect Off(StripLayout layout) => new SolidColorEffect(layout, new Rgb8(0, 0, 0));
 }

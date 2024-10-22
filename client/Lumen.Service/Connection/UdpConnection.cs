@@ -1,5 +1,7 @@
 ﻿using System.Net.Sockets;
 using Lumen.Service.ControllerMessages;
+using Microsoft.Extensions.Logging;
+using static Lumen.Service.Logging;
 
 namespace Lumen.Service.Connection;
 
@@ -22,8 +24,9 @@ public class UdpConnection : IConnection, IDisposable
         {
             controllerMessage.SerializeAsBytes(ref span);
         }
-        catch (ArgumentOutOfRangeException)
+        catch (ArgumentOutOfRangeException e)
         {
+            Logger?.LogError(e, "Message size exceeded buffer size of {0}", buffer.Length);
             return Task.CompletedTask;
         }
 

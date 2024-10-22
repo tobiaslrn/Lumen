@@ -38,4 +38,12 @@ public class StripSettings
 
         return null;
     }
+
+    public void DeleteCurrentEffectSettings()
+    {
+        if (ActiveEffectTypeName != null)
+        {
+            CachedEffectSettings.DeleteEffect(ActiveEffectTypeName);
+        }
+    }
 }

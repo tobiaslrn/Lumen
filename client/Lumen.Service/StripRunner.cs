@@ -1,6 +1,8 @@
 ﻿using Lumen.Service.Connection;
 using Lumen.Service.ControllerMessages;
 using Lumen.Service.Effect;
+using Microsoft.Extensions.Logging;
+using static Lumen.Service.Logging;
 
 namespace Lumen.Service;
 
@@ -21,7 +23,9 @@ public class StripRunner : IDisposable
             new TimeSpan(0, 0, 0, 0, 1000),
             cts
         );
+        Logger?.LogInformation("Starting post and keepalive tasks");
         await Task.WhenAll(postEffect, postKeepalive);
+        Logger?.LogInformation("Post and keepalive tasks completed");
     }
 
     private async Task PostEffectValues(IEffect effect, CancellationToken cts)

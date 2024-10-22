@@ -29,4 +29,9 @@ public class EffectSettingsCache
     {
         return _effectSettingsMap.TryGetValue(name, out effectSetting);
     }
+
+    public void DeleteEffect(string name)
+    {
+        _effectSettingsMap.Remove(name);
+    }
 }
