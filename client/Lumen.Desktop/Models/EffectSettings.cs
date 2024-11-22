@@ -41,7 +41,7 @@ public class EffectOffSettings : EffectSettings
         return new EffectOffViewModel();
     }
 
-    public override bool TryToEffect(StripLayout layout, out IEffect? effect)
+    public override bool TryToEffect(StripLayout layout, [NotNullWhen(true)] out IEffect? effect)
     {
         effect = new SolidColorEffect(layout, new Rgb8(0, 0, 0));
         return true;
@@ -99,7 +99,7 @@ public class EffectSolidSettings : EffectSettings
         return new EffectSolidViewModel(this);
     }
 
-    public override bool TryToEffect(StripLayout layout, out IEffect? effect)
+    public override bool TryToEffect(StripLayout layout, [NotNullWhen(true)] out IEffect? effect)
     {
         effect = new SolidColorEffect(layout, new Rgb8(R, G, B));
         return true;
