@@ -94,6 +94,10 @@
             <AutoGen>True</AutoGen>
             <DependentUpon>Resources.resx</DependentUpon>
         </Compile>
+        <Compile Update="Views\TabPages\EffectSettings\EffectCalibrateLayoutView.axaml.cs">
+            <DependentUpon>EffectCalibrateLayoutView.axaml</DependentUpon>
+            <SubType>Code</SubType>
+        </Compile>
     </ItemGroup>
 
     <ItemGroup>

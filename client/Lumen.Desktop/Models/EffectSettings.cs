@@ -11,6 +11,7 @@ namespace Lumen.Desktop.Models;
 [JsonDerivedType(typeof(EffectOffSettings), nameof(EffectOffSettings))]
 [JsonDerivedType(typeof(EffectSolidSettings), nameof(EffectSolidSettings))]
 [JsonDerivedType(typeof(EffectAmbientSettings), nameof(EffectAmbientSettings))]
+[JsonDerivedType(typeof(EffectCalibrateLayoutSettings), nameof(EffectCalibrateLayoutSettings))]
 public abstract class EffectSettings
 {
     public abstract EffectSettingViewModel ToEffectSettingViewModel();
@@ -44,6 +45,25 @@ public class EffectOffSettings : EffectSettings
     public override bool TryToEffect(StripLayout layout, [NotNullWhen(true)] out IEffect? effect)
     {
         effect = new SolidColorEffect(layout, new Rgb8(0, 0, 0));
+        return true;
+    }
+
+    public override bool IsConstructable()
+    {
+        return true;
+    }
+}
+
+public class EffectCalibrateLayoutSettings : EffectSettings
+{
+    public override EffectSettingViewModel ToEffectSettingViewModel()
+    {
+        return new EffectCalibrateLayoutViewModel();
+    }
+
+    public override bool TryToEffect(StripLayout layout, [NotNullWhen(true)] out IEffect? effect)
+    {
+        effect = new LayoutCalibrationEffect(layout);
         return true;
     }
 
